@@ -1,90 +1,128 @@
-import express from 'express';
-import session from 'express-session';
-import path from 'path';
-import { fileURLToPath } from 'url';
+const dotenv = require('dotenv');
+dotenv.config();
+
+const express = require('express');
+const session = require('express-session');
+const mongoose = require('mongoose');
+const MongoStore = require('connect-mongo');
+const bcrypt = require('bcrypt');
+const Joi = require('joi');
+const path = require('path');
+
+const User = require('./models/user.js');
 
 const app = express();
-const PORT = 8000;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const PORT = process.env.PORT || 8000;
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static('public'));
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
 app.use(session({
-  secret: 'SecretKey',
+  secret: process.env.SESSION_SECRET,
   resave: false,
-  saveUninitialized: true
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: process.env.MONGO_URI,
+    ttl: 60 * 60, // 1 hour in secs
+    crypto: {
+      secret: process.env.SESSION_SECRET
+    }
+  }),
+  cookie: {
+    maxAge: 1000 * 60 * 60 // 1 hour in ms
+  }
 }));
 
-function renderPage(title, body, fgColor = 'black', bgColor = 'white') {
-  return `
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-      <meta charset="UTF-8">
-      <title>${title}</title>
-      <link rel="stylesheet" href="/style.css">
-    </head>
-    <body style="color: ${fgColor}; background-color: ${bgColor};">
-      <nav>
-        <a href="/counter">Counter</a> |
-        <a href="/changeStyle?color=yellow&bg=green">Set yellow on Green</a>
-      </nav>
-      ${body}
-    </body>
-    </html>
-  `;
-}
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+}).then(() => console.log("Connected to MongoDB"))
+  .catch((err) => console.error("MongoDB error:", err));
 
 app.get('/', (req, res) => {
-  const fg = req.session.fgColor || 'black';
-  const bg = req.session.bgColor || 'white';
-  const content = `
-    <h1>Main Page</h1>
-    <p>Welcome! Your session color is <strong>${fg}</strong> on <strong>${bg}</strong>.</p>
-  `;
-  res.send(renderPage("Home", content, fg, bg));
+  res.sendFile(path.join(__dirname, '/public/index.html'));
 });
 
-app.get('/changeStyle', (req, res) => {
-  const { color, bg } = req.query;
-  if (color) req.session.fgColor = color;
-  if (bg) req.session.bgColor = bg;
-  res.redirect('/');
+app.get('/signup', (req, res) => {
+  res.sendFile(path.join(__dirname, '/public/signup.html'));
 });
 
-app.get('/counter', (req, res) => {
-  if (typeof req.session.count !== 'number') {
-    req.session.count = 0;
+app.post('/signup', async (req, res) => {
+  const schema = Joi.object({
+    name: Joi.string().min(1).max(50).required(),
+    email: Joi.string().email().required(),
+    password: Joi.string().min(6).required()
+  });
+
+  const { error } = schema.validate(req.body);
+  if (error) return res.send("Invalid input: " + error.details[0].message);
+
+  const { name, email, password } = req.body;
+  const existingUser = await User.findOne({ email });
+
+  if (existingUser) return res.send("Email already registered.");
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const newUser = new User({ name, email, password: hashedPassword });
+  await newUser.save();
+
+  req.session.user = { name };
+  res.redirect('/members');
+});
+
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(__dirname, '/public/login.html'));
+});
+
+app.post('/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  const user = await User.findOne({ email });
+
+  if (!user) {
+    console.log("User not found:", email);
+    return res.send("User not found.");
   }
-  const fg = req.session.fgColor || 'black';
-  const bg = req.session.bgColor || 'white';
 
-  const content = `
-    <h1>Counter</h1>
-    <p>Current count: ${req.session.count}</p>
-    <form action="/counter/up" method="post">
-        <button>Up</button>
-    </form>
-    <form action="/counter/down" method="post">
-        <button>Down</button>
-    </form>
-  `;
-  res.send(renderPage("Counter", content, fg, bg));
-});
-app.get('/pressed', (req, res) => {
-    if (a);
-});
-app.post('/counter/up', (req, res) => {
-    req.session.count++;
-    res.redirect('/counter');
+  console.log("Entered password:", password);
+  console.log("Stored hash:", user.password);
+
+  const match = await bcrypt.compare(password, user.password);
+  console.log("Password match:", match);
+
+  if (!match) return res.send("Invalid password.");
+
+  req.session.user = { name: user.name };
+  res.redirect('/members');
 });
 
-app.post('/counter/down', (req, res) => {
-    req.session.count--;
-    res.redirect('/counter');
+app.get('/members', (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/');
+  }
+
+  const name = req.session.user.name;
+
+  const images = ['cat1.jpg', 'cat2.jpg', 'cat3.jpg'];
+  const randomImage = images[Math.floor(Math.random() * images.length)];
+
+  res.send(`
+    <h1>Hello, ${name}!</h1>
+    <a href="/logout">Logout</a>
+    <br><br>
+    <img src="/${randomImage}" alt="Random image" style="max-width:300px;">
+  `);
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.get('/logout', (req, res) => {
+  req.session.destroy(() => {
+    res.redirect('/');
+  });
 });
+
+app.get('*', (req, res) => {
+  res.status(404).send("Page not found - 404");
+});
+
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
