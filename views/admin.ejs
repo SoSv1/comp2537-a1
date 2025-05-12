@@ -1,0 +1,35 @@
+<%- include("partials/header") %>
+<h1>Admin Panel</h1>
+  <a href="/members">Back to Members</a> | <a href="/logout">Logout</a>
+  <h2>All Users</h2>
+  <table border="1" cellpadding="5">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Email</th>
+        <th>User Type</th>
+        <th>Action</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% users.forEach(user => { %>
+        <tr>
+          <td><%= user.name %></td>
+          <td><%= user.email %></td>
+          <td><%= user.user_type %></td>
+          <td>
+            <% if (user.user_type === 'user') { %>
+              <form action="/admin/promote/<%= user._id %>" method="POST" style="display:inline;">
+                <button type="submit">Promote to Admin</button>
+              </form>
+            <% } else { %>
+              <form action="/admin/demote/<%= user._id %>" method="POST" style="display:inline;">
+                <button type="submit">Demote to User</button>
+              </form>
+            <% } %>
+          </td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+<%- include("partials/footer") %>

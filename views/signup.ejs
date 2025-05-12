@@ -1,11 +1,5 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Sign Up</title>
-</head>
-<body>
-  <h1>Sign Up</h1>
+<%- include("partials/header") %>
+<h1>Sign Up</h1>
   <form action="/signup" method="POST">
     <label for="name">Name:</label><br>
     <input type="text" id="name" name="name" required><br><br>
@@ -20,5 +14,4 @@
   </form>
 
   <p><a href="/">Go Back Home</a></p>
-</body>
-</html>
+<%- include("partials/footer") %>

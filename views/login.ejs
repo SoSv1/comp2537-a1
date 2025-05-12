@@ -1,9 +1,4 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Log In</title>
-</head>
+<%- include("partials/header") %>
 <body>
   <h1>Log In</h1>
   <form action="/login" method="POST">
@@ -16,7 +11,6 @@
     <button type="submit">Log In</button>
   </form>
   
-  
   <p>Don't have an account? <a href="/signup">Sign up here</a></p>
 </body>
-</html>
+<%- include("partials/footer") %>

@@ -18,6 +18,10 @@ app.use(express.static('public'));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+
+
 app.use(session({
   secret: process.env.SESSION_SECRET,
   resave: false,
@@ -41,11 +45,11 @@ mongoose.connect(process.env.MONGO_URI, {
   .catch((err) => console.error("MongoDB error:", err));
 
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '/public/index.html'));
+  res.render('index', { user: req.session.user || null });
 });
 
 app.get('/signup', (req, res) => {
-  res.sendFile(path.join(__dirname, '/public/signup.html'));
+  res.render('signup');
 });
 
 app.post('/signup', async (req, res) => {
@@ -67,12 +71,17 @@ app.post('/signup', async (req, res) => {
   const newUser = new User({ name, email, password: hashedPassword });
   await newUser.save();
 
-  req.session.user = { name };
-  res.redirect('/members');
+  req.session.user = { name: user.name, user_type: user.user_type };
+  const images = ['cat1.jpg', 'cat2.jpg', 'cat3.jpg'];
+
+  res.render('members', { name, images });
 });
 
 app.get('/login', (req, res) => {
-  res.sendFile(path.join(__dirname, '/public/login.html'));
+  res.render('login');
+});
+app.get('/cats', (req, res) => {
+  res.render('cats');
 });
 
 app.post('/login', async (req, res) => {
@@ -93,26 +102,42 @@ app.post('/login', async (req, res) => {
 
   if (!match) return res.send("Invalid password.");
 
-  req.session.user = { name: user.name };
-  res.redirect('/members');
+  req.session.user = { name: user.name, user_type: user.user_type };
+  const name = req.session.user.name;
+  const images = ['cat1.jpg', 'cat2.jpg', 'cat3.jpg'];
+
+  res.render('members', { name, images });
 });
 
 app.get('/members', (req, res) => {
   if (!req.session.user) {
     return res.redirect('/');
   }
-
   const name = req.session.user.name;
-
   const images = ['cat1.jpg', 'cat2.jpg', 'cat3.jpg'];
-  const randomImage = images[Math.floor(Math.random() * images.length)];
 
-  res.send(`
-    <h1>Hello, ${name}!</h1>
-    <a href="/logout">Logout</a>
-    <br><br>
-    <img src="/${randomImage}" alt="Random image" style="max-width:300px;">
-  `);
+  res.render('members', { name, images });
+});
+
+app.get('/admin', async (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login');
+  } else if (req.session.user.user_type !== 'admin'){
+    return res.status(403).send("Access denied.");
+  }
+
+  const users = await User.find({});
+  res.render('admin', { users });
+});
+
+app.post('/admin/promote/:id', async (req, res) => {
+  await User.findByIdAndUpdate(req.params.id, { user_type: 'admin' });
+  res.redirect('/admin');
+});
+
+app.post('/admin/demote/:id', async (req, res) => {
+  await User.findByIdAndUpdate(req.params.id, { user_type: 'user' });
+  res.redirect('/admin');
 });
 
 app.get('/logout', (req, res) => {
@@ -122,7 +147,7 @@ app.get('/logout', (req, res) => {
 });
 
 app.get('*', (req, res) => {
-  res.status(404).send("Page not found - 404");
+  res.status(404).render('404');
 });
 
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
